@@ -1,1 +1,1 @@
-# Hindi-Fake-News_detection
+# Multilingual-Fake-News_detection
