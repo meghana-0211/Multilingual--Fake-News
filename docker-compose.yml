@@ -1,0 +1,49 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: fakenews
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  ganache:
+    image: trufflesuite/ganache-cli
+    ports:
+      - "8545:8545"
+    command: >
+      --deterministic
+      --accounts 10
+      --mnemonic "test test test test test test test test test test test junk"
+
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+      - ganache
+    environment:
+      DATABASE_URL: postgresql://admin:password@postgres:5432/fakenews
+      BLOCKCHAIN_URL: http://ganache:8545
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      REACT_APP_API_URL: http://backend:5000
+
+volumes:
+  postgres_data:

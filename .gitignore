@@ -1,0 +1,6 @@
+# Large datasets
+data/processed/
+*.csv
+
+
+
