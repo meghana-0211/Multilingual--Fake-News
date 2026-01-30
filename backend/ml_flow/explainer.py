@@ -13,6 +13,164 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+import torch
+import numpy as np
+from transformers import AutoTokenizer
+# adjust import if needed
+
+import torch
+import torch.nn as nn
+from transformers import AutoModel
+
+class LSTMBERTEnsemble(nn.Module):
+    def __init__(self, 
+                 bert_model='ai4bharat/indic-bert',
+                 lstm_hidden=256,
+                 lstm_layers=2,
+                 dropout=0.3,
+                 num_classes=2):
+        super().__init__()
+        
+        # BERT component
+        self.bert = AutoModel.from_pretrained(bert_model)
+        bert_dim = self.bert.config.hidden_size
+        
+        # BiLSTM component
+        self.lstm = nn.LSTM(
+            bert_dim,
+            lstm_hidden,
+            num_layers=lstm_layers,
+            bidirectional=True,
+            batch_first=True,
+            dropout=dropout if lstm_layers > 1 else 0
+        )
+        
+        # Attention mechanism
+        self.attention = nn.MultiheadAttention(
+            embed_dim=lstm_hidden * 2,
+            num_heads=8,
+            dropout=dropout,
+            batch_first=True
+        )
+        
+        # Classification heads
+        self.dropout = nn.Dropout(dropout)
+        
+        # BERT classifier
+        self.bert_classifier = nn.Linear(bert_dim, num_classes)
+        
+        # LSTM classifier
+        self.lstm_classifier = nn.Linear(lstm_hidden * 2, num_classes)
+        
+        # Ensemble fusion
+        self.fusion = nn.Linear(num_classes * 2, num_classes)
+        
+    def forward(self, input_ids, attention_mask):
+        # BERT forward
+        bert_output = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask
+        )
+        
+        # Get [CLS] token for classification
+        bert_pooled = bert_output.pooler_output  # [batch, bert_dim]
+        bert_logits = self.bert_classifier(self.dropout(bert_pooled))
+        
+        # Get sequence output for LSTM
+        bert_sequence = bert_output.last_hidden_state  # [batch, seq_len, bert_dim]
+        
+        # BiLSTM forward
+        lstm_out, (hidden, cell) = self.lstm(bert_sequence)  # [batch, seq_len, lstm_hidden*2]
+        
+        # Self-attention
+        attn_out, attn_weights = self.attention(lstm_out, lstm_out, lstm_out)
+        
+        # Mean pooling with attention
+        attn_pooled = torch.mean(attn_out, dim=1)  # [batch, lstm_hidden*2]
+        
+        lstm_logits = self.lstm_classifier(self.dropout(attn_pooled))
+        
+        # Ensemble fusion
+        combined = torch.cat([bert_logits, lstm_logits], dim=1)
+        final_logits = self.fusion(combined)
+        
+        return {
+            'logits': final_logits,
+            'bert_logits': bert_logits,
+            'lstm_logits': lstm_logits,
+            'attention_weights': attn_weights,
+            'bert_embeddings': bert_pooled
+        }
+    
+class EnsembleModelWrapper:
+    def __init__(self, model_path, device=None):
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+
+        # Load tokenizer
+        self.tokenizer = AutoTokenizer.from_pretrained("ai4bharat/indic-bert")
+
+        # Load model
+        self.model = LSTMBERTEnsemble()
+        checkpoint = torch.load(model_path, map_location=self.device)
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.model.to(self.device)
+        self.model.eval()
+
+    def _encode(self, texts):
+        return self.tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=256,
+            return_tensors="pt"
+        )
+
+    def predict_batch(self, texts):
+        enc = self._encode(texts)
+        enc = {k: v.to(self.device) for k, v in enc.items()}
+
+        with torch.no_grad():
+            outputs = self.model(enc["input_ids"], enc["attention_mask"])
+            probs = torch.softmax(outputs["logits"], dim=1)
+
+        results = []
+        for p in probs.cpu().numpy():
+            results.append({
+                "ensemble_prob": p,
+                "prediction": int(np.argmax(p)),
+                "confidence": float(np.max(p))
+            })
+
+        return results
+
+    def predict_single(self, text):
+        return self.predict_batch([text])[0]
+
+    def get_attention_weights(self, text):
+        enc = self._encode([text])
+        enc = {k: v.to(self.device) for k, v in enc.items()}
+
+        with torch.no_grad():
+            outputs = self.model(enc["input_ids"], enc["attention_mask"])
+
+        # Check if attention_weights exists in outputs
+        if "attention_weights" in outputs:
+            attn = outputs["attention_weights"].mean(dim=1).squeeze(0).cpu().numpy()
+        else:
+            # If model doesn't return attention weights, create dummy ones
+            attn = np.ones(len(enc["input_ids"][0])) / len(enc["input_ids"][0])
+
+        tokens = self.tokenizer.convert_ids_to_tokens(enc["input_ids"][0])
+
+        probs = torch.softmax(outputs["logits"], dim=1)[0]
+
+        return {
+            "tokens": tokens,
+            "attention_weights": attn.tolist(),
+            "prediction": int(torch.argmax(probs)),
+            "confidence": float(torch.max(probs))
+        }
+
 
 class ExplainabilityModule:
     def __init__(self, ensemble_model, class_names: List[str] = ['Genuine', 'Fake']):
@@ -25,7 +183,6 @@ class ExplainabilityModule:
             feature_selection='auto',
             split_expression=r'\s+',  # Split by whitespace
             bow=True,
-            mode='classification'
         )
     
     def explain_with_lime(self, text: str, num_features: int = 10) -> Dict:
@@ -49,7 +206,7 @@ class ExplainabilityModule:
             explanation_data = {
                 'text': text,
                 'prediction_class': explanation.predicted_class,
-                'prediction_proba': explanation.predict_proba,
+                'prediction_proba': explanation.predict_proba.tolist(),
                 'local_exp': explanation.local_exp,
                 'intercept': explanation.intercept,
                 'score': explanation.score
@@ -149,9 +306,7 @@ class ExplainabilityModule:
             'prediction': {
                 'class': 'Fake' if prediction_result['prediction'] == 1 else 'Genuine',
                 'confidence': prediction_result['confidence'],
-                'lstm_bert_prob': prediction_result['lstm_bert_prob'],
-                'tfidf_prob': prediction_result['tfidf_prob'],
-                'ensemble_prob': prediction_result['ensemble_prob']
+                'ensemble_prob': prediction_result['ensemble_prob'].tolist()
             },
             'lime_explanation': lime_explanation,
             'attention_explanation': attention_explanation,
@@ -308,10 +463,10 @@ class ExplainabilityModule:
                     explanation += f"  • '{word}' {direction} the prediction (score: {score:.3f})\n"
                 explanation += "\n"
             
-            explanation += "Model Components:\n"
-            explanation += f"  • LSTM-BERT probability: {prediction['lstm_bert_prob']}\n"
-            explanation += f"  • TF-IDF probability: {prediction['tfidf_prob']}\n"
-            explanation += f"  • Final ensemble probability: {prediction['ensemble_prob']}\n"
+            explanation += "Model Ensemble Probabilities:\n"
+            probs = prediction['ensemble_prob']
+            explanation += f"  • Genuine: {probs[0]:.4f}\n"
+            explanation += f"  • Fake: {probs[1]:.4f}\n"
             
             return explanation
             
@@ -359,23 +514,37 @@ class ExplanationServer:
 if __name__ == "__main__":
     # Example usage
     try:
-        from ensemble_model import EnsembleModel
+        print("Loading model...")
         
-        # Load trained model
-        ensemble_model = EnsembleModel()
-        ensemble_model.load_models("models/")
+        # FIX: Initialize the EnsembleModelWrapper correctly
+        model_path = "/Users/Megha/finalyearproj/Hindi-Fake-News_detection/backend/ml_flow/multilingual-fake-news-complete.tar.gz"
+        ensemble_model = EnsembleModelWrapper(model_path)
         
-        # Initialize explainer
+        print("Model loaded successfully!")
+        
+        # Initialize explainer with the model object (not the path)
         explainer = ExplanationServer(ensemble_model)
+        
+        print("Explainer initialized!")
         
         # Test explanation
         sample_text = "यह एक बहुत ही संदिग्ध खबर है जो फर्जी लग रही है।"
         
+        print(f"\nAnalyzing text: {sample_text}")
+        
         result = explainer.get_explanation_with_visuals(sample_text, "explanation_output")
         
+        print("\n" + "="*60)
         print("Explanation generated successfully!")
+        print("="*60)
         print("\nText Explanation:")
         print(result['text_explanation'])
         
+        if 'visualizations' in result and result['visualizations']:
+            print(f"\nVisualizations saved with prefix: explanation_output")
+            
     except Exception as e:
         print(f"Error in explanation demo: {e}")
+        import traceback
+        traceback.print_exc()
+
