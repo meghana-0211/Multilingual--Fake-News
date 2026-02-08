@@ -1,252 +1,273 @@
-# scripts/train_model.py
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from transformers import get_linear_schedule_with_warmup
-from sklearn.model_selection import train_test_split
-import pandas as pd
-from tqdm import tqdm
-import json
-from multilingual_preprocessor import MultilingualPreprocessor
+"""
+MODEL ARCHITECTURE
+IndicBERT + BiLSTM with Attention for Multilingual Fake News Detection
+
+Author: Your Name
+Architecture: Ensemble of IndicBERT and BiLSTM with Multi-head Attention
+Languages: Hindi, Gujarati, Marathi, Telugu
+"""
 
 import torch
 import torch.nn as nn
-from transformers import AutoModel
+from transformers import AutoModel, AutoConfig
 
-class LSTMBERTEnsemble(nn.Module):
-    def __init__(self, 
-                 bert_model='ai4bharat/indic-bert',
-                 lstm_hidden=256,
-                 lstm_layers=2,
-                 dropout=0.3,
-                 num_classes=2):
+
+class BiLSTMWithAttention(nn.Module):
+    """BiLSTM with Multi-head Attention layer"""
+    
+    def __init__(self, input_dim, hidden_dim, num_layers, num_heads, dropout):
         super().__init__()
         
-        # BERT component
-        self.bert = AutoModel.from_pretrained(bert_model)
-        bert_dim = self.bert.config.hidden_size
-        
-        # BiLSTM component
         self.lstm = nn.LSTM(
-            bert_dim,
-            lstm_hidden,
-            num_layers=lstm_layers,
+            input_dim,
+            hidden_dim,
+            num_layers=num_layers,
             bidirectional=True,
             batch_first=True,
-            dropout=dropout if lstm_layers > 1 else 0
+            dropout=dropout if num_layers > 1 else 0
         )
         
-        # Attention mechanism
+        # Multi-head attention
         self.attention = nn.MultiheadAttention(
-            embed_dim=lstm_hidden * 2,
-            num_heads=8,
+            embed_dim=hidden_dim * 2,  # *2 because bidirectional
+            num_heads=num_heads,
             dropout=dropout,
             batch_first=True
         )
         
-        # Classification heads
-        self.dropout = nn.Dropout(dropout)
+        # Layer normalization
+        self.layer_norm = nn.LayerNorm(hidden_dim * 2)
         
-        # BERT classifier
-        self.bert_classifier = nn.Linear(bert_dim, num_classes)
+    def forward(self, x, mask=None):
+        """
+        Args:
+            x: [batch, seq_len, input_dim]
+            mask: [batch, seq_len] - attention mask
         
-        # LSTM classifier
-        self.lstm_classifier = nn.Linear(lstm_hidden * 2, num_classes)
+        Returns:
+            output: [batch, hidden_dim * 2]
+            attention_weights: [batch, seq_len, seq_len]
+        """
+        # BiLSTM
+        lstm_out, (hidden, cell) = self.lstm(x)  # [batch, seq_len, hidden_dim*2]
         
-        # Ensemble fusion
-        self.fusion = nn.Linear(num_classes * 2, num_classes)
-        
-    def forward(self, input_ids, attention_mask):
-        # BERT forward
-        bert_output = self.bert(
-            input_ids=input_ids,
-            attention_mask=attention_mask
+        # Multi-head attention
+        # Query, Key, Value are all the LSTM output
+        attn_out, attn_weights = self.attention(
+            lstm_out, lstm_out, lstm_out,
+            key_padding_mask=mask  # Mask padding positions
         )
         
-        # Get [CLS] token for classification
-        bert_pooled = bert_output.pooler_output  # [batch, bert_dim]
-        bert_logits = self.bert_classifier(self.dropout(bert_pooled))
+        # Residual connection + Layer norm
+        attn_out = self.layer_norm(attn_out + lstm_out)
         
-        # Get sequence output for LSTM
-        bert_sequence = bert_output.last_hidden_state  # [batch, seq_len, bert_dim]
+        # Global average pooling over sequence
+        if mask is not None:
+            # Mask out padding before pooling
+            mask_expanded = (~mask).unsqueeze(-1).float()  # [batch, seq_len, 1]
+            attn_out = attn_out * mask_expanded
+            pooled = attn_out.sum(dim=1) / mask_expanded.sum(dim=1)  # [batch, hidden_dim*2]
+        else:
+            pooled = attn_out.mean(dim=1)  # [batch, hidden_dim*2]
         
-        # BiLSTM forward
-        lstm_out, (hidden, cell) = self.lstm(bert_sequence)  # [batch, seq_len, lstm_hidden*2]
+        return pooled, attn_weights
+
+
+class IndicBERTBiLSTMEnsemble(nn.Module):
+    """
+    Ensemble model combining IndicBERT and BiLSTM with Attention
+    
+    Architecture:
+    1. IndicBERT path: Pretrained transformer for contextual understanding
+    2. BiLSTM path: Sequential processing with attention for pattern detection
+    3. Ensemble fusion: Weighted combination of both paths
+    """
+    
+    def __init__(
+        self,
+        bert_model_name='ai4bharat/indic-bert',
+        lstm_hidden_dim=256,
+        lstm_num_layers=2,
+        attention_heads=8,
+        dropout=0.3,
+        num_classes=2,
+        freeze_bert_layers=0  # Number of BERT layers to freeze (0 = train all)
+    ):
+        super().__init__()
         
-        # Self-attention
-        attn_out, attn_weights = self.attention(lstm_out, lstm_out, lstm_out)
+        # IndicBERT component
+        self.bert = AutoModel.from_pretrained(bert_model_name)
+        self.bert_config = AutoConfig.from_pretrained(bert_model_name)
+        bert_dim = self.bert_config.hidden_size  # 768 for base model
         
-        # Mean pooling with attention
-        attn_pooled = torch.mean(attn_out, dim=1)  # [batch, lstm_hidden*2]
+        # Optionally freeze early BERT layers
+        if freeze_bert_layers > 0:
+            for i, layer in enumerate(self.bert.encoder.layer):
+                if i < freeze_bert_layers:
+                    for param in layer.parameters():
+                        param.requires_grad = False
         
-        lstm_logits = self.lstm_classifier(self.dropout(attn_pooled))
+        # BiLSTM component
+        self.bilstm = BiLSTMWithAttention(
+            input_dim=bert_dim,
+            hidden_dim=lstm_hidden_dim,
+            num_layers=lstm_num_layers,
+            num_heads=attention_heads,
+            dropout=dropout
+        )
+        
+        # Dropout
+        self.dropout = nn.Dropout(dropout)
+        
+        # Classification heads
+        # BERT path classifier
+        self.bert_classifier = nn.Sequential(
+            nn.Linear(bert_dim, bert_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(bert_dim // 2, num_classes)
+        )
+        
+        # BiLSTM path classifier
+        lstm_output_dim = lstm_hidden_dim * 2  # Bidirectional
+        self.lstm_classifier = nn.Sequential(
+            nn.Linear(lstm_output_dim, lstm_output_dim // 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(lstm_output_dim // 2, num_classes)
+        )
         
         # Ensemble fusion
-        combined = torch.cat([bert_logits, lstm_logits], dim=1)
-        final_logits = self.fusion(combined)
+        # Learnable weights for combining predictions
+        self.ensemble_weights = nn.Parameter(torch.tensor([0.6, 0.4]))  # BERT=0.6, LSTM=0.4
+        
+        # Alternative: Use a small network to combine features
+        self.fusion_layer = nn.Sequential(
+            nn.Linear(bert_dim + lstm_output_dim, 128),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(128, num_classes)
+        )
+        
+        self.use_fusion_layer = True  # Set to True for better performance
+        
+    def forward(self, input_ids, attention_mask):
+        """
+        Args:
+            input_ids: [batch, seq_len]
+            attention_mask: [batch, seq_len]
+        
+        Returns:
+            dict with:
+                - logits: [batch, num_classes]
+                - bert_logits: [batch, num_classes]
+                - lstm_logits: [batch, num_classes]
+                - attention_weights: [batch, num_heads, seq_len, seq_len]
+                - bert_embeddings: [batch, bert_dim]
+                - lstm_embeddings: [batch, lstm_dim]
+        """
+        # =========================================
+        # BERT Path
+        # =========================================
+        bert_outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=True
+        )
+        
+        # Get [CLS] token representation for classification
+        bert_pooled = bert_outputs.pooler_output  # [batch, bert_dim]
+        bert_pooled = self.dropout(bert_pooled)
+        
+        # BERT classification
+        bert_logits = self.bert_classifier(bert_pooled)
+        
+        # =========================================
+        # BiLSTM Path
+        # =========================================
+        # Use BERT's last hidden state as input to LSTM
+        bert_sequence = bert_outputs.last_hidden_state  # [batch, seq_len, bert_dim]
+        
+        # Create padding mask for LSTM (True where padding)
+        padding_mask = (attention_mask == 0)
+        
+        # BiLSTM with attention
+        lstm_pooled, attn_weights = self.bilstm(bert_sequence, padding_mask)
+        lstm_pooled = self.dropout(lstm_pooled)
+        
+        # LSTM classification
+        lstm_logits = self.lstm_classifier(lstm_pooled)
+        
+        # =========================================
+        # Ensemble Fusion
+        # =========================================
+        if self.use_fusion_layer:
+            # Concatenate BERT and LSTM features
+            combined_features = torch.cat([bert_pooled, lstm_pooled], dim=1)
+            final_logits = self.fusion_layer(combined_features)
+        else:
+            # Weighted average of logits
+            weights = torch.softmax(self.ensemble_weights, dim=0)
+            final_logits = weights[0] * bert_logits + weights[1] * lstm_logits
         
         return {
             'logits': final_logits,
             'bert_logits': bert_logits,
             'lstm_logits': lstm_logits,
             'attention_weights': attn_weights,
-            'bert_embeddings': bert_pooled
-        }
-    
-class FakeNewsDataset(Dataset):
-    def __init__(self, texts, labels, languages, preprocessor):
-        self.texts = texts
-        self.labels = labels
-        self.languages = languages
-        self.preprocessor = preprocessor
-    
-    def __len__(self):
-        return len(self.texts)
-    
-    def __getitem__(self, idx):
-        encoding, _ = self.preprocessor.preprocess_batch(
-            [self.texts[idx]], 
-            [self.languages[idx]]
-        )
-        
-        return {
-            'input_ids': encoding['input_ids'].squeeze(0),
-            'attention_mask': encoding['attention_mask'].squeeze(0),
-            'label': torch.tensor(self.labels[idx], dtype=torch.long)
+            'bert_embeddings': bert_pooled,
+            'lstm_embeddings': lstm_pooled
         }
 
-def train_epoch(model, dataloader, optimizer, scheduler, device):
-    model.train()
-    total_loss = 0
-    correct = 0
-    total = 0
-    
-    criterion = nn.CrossEntropyLoss()
-    
-    for batch in tqdm(dataloader, desc="Training"):
-        input_ids = batch['input_ids'].to(device)
-        attention_mask = batch['attention_mask'].to(device)
-        labels = batch['label'].to(device)
-        
-        optimizer.zero_grad()
-        
-        outputs = model(input_ids, attention_mask)
-        logits = outputs['logits']
-        
-        loss = criterion(logits, labels)
-        loss.backward()
-        
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-        optimizer.step()
-        scheduler.step()
-        
-        total_loss += loss.item()
-        _, predicted = torch.max(logits, 1)
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
-    
-    return total_loss / len(dataloader), correct / total
 
-def evaluate(model, dataloader, device):
-    model.eval()
-    correct = 0
-    total = 0
-    all_preds = []
-    all_labels = []
+def count_parameters(model):
+    """Count trainable and total parameters"""
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total = sum(p.numel() for p in model.parameters())
+    return trainable, total
+
+
+def test_model():
+    """Test model architecture"""
+    print("="*60)
+    print("TESTING MODEL ARCHITECTURE")
+    print("="*60)
+    
+    # Create model
+    model = IndicBERTBiLSTMEnsemble()
+    
+    # Count parameters
+    trainable, total = count_parameters(model)
+    print(f"\nModel parameters:")
+    print(f"  Trainable: {trainable:,}")
+    print(f"  Total: {total:,}")
+    print(f"  Size: ~{total * 4 / 1024 / 1024:.1f} MB (fp32)")
+    
+    # Test forward pass
+    batch_size = 4
+    seq_len = 128
+    
+    # Create dummy inputs
+    input_ids = torch.randint(0, 30000, (batch_size, seq_len))
+    attention_mask = torch.ones(batch_size, seq_len)
+    
+    # Forward pass
+    print(f"\nTesting forward pass...")
+    print(f"  Input shape: {input_ids.shape}")
     
     with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Evaluating"):
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['label'].to(device)
-            
-            outputs = model(input_ids, attention_mask)
-            logits = outputs['logits']
-            
-            _, predicted = torch.max(logits, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-            
-            all_preds.extend(predicted.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
+        outputs = model(input_ids, attention_mask)
     
-    accuracy = correct / total
+    print(f"\nOutput shapes:")
+    print(f"  Logits: {outputs['logits'].shape}")
+    print(f"  BERT logits: {outputs['bert_logits'].shape}")
+    print(f"  LSTM logits: {outputs['lstm_logits'].shape}")
+    print(f"  Attention weights: {outputs['attention_weights'].shape}")
+    print(f"  BERT embeddings: {outputs['bert_embeddings'].shape}")
+    print(f"  LSTM embeddings: {outputs['lstm_embeddings'].shape}")
     
-    # Calculate per-class metrics
-    from sklearn.metrics import classification_report
-    report = classification_report(all_labels, all_preds, 
-                                   target_names=['Fake', 'Real'],
-                                   output_dict=True)
-    
-    return accuracy, report
+    print("\n✓ Model architecture test passed!")
 
-def main():
-    # Load data
-    df = pd.read_csv('data/processed/multilingual_dataset.csv')
-    
-    # Split
-    train_df, test_df = train_test_split(df, test_size=0.2, stratify=df['label'], random_state=42)
-    train_df, val_df = train_test_split(train_df, test_size=0.1, stratify=train_df['label'], random_state=42)
-    
-    # Initialize
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    preprocessor = MultilingualPreprocessor()
-    model = LSTMBERTEnsemble().to(device)
-    
-    # Datasets
-    train_dataset = FakeNewsDataset(
-        train_df['text'].tolist(),
-        train_df['label'].tolist(),
-        train_df['language'].tolist(),
-        preprocessor
-    )
-    val_dataset = FakeNewsDataset(
-        val_df['text'].tolist(),
-        val_df['label'].tolist(),
-        val_df['language'].tolist(),
-        preprocessor
-    )
-    
-    # Dataloaders
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=32)
-    
-    # Optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
-    
-    # Scheduler
-    num_epochs = 5
-    num_training_steps = len(train_loader) * num_epochs
-    scheduler = get_linear_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=num_training_steps // 10,
-        num_training_steps=num_training_steps
-    )
-    
-    # Training loop
-    best_val_acc = 0
-    for epoch in range(num_epochs):
-        print(f"\n=== Epoch {epoch + 1}/{num_epochs} ===")
-        
-        train_loss, train_acc = train_epoch(model, train_loader, optimizer, scheduler, device)
-        val_acc, val_report = evaluate(model, val_loader, device)
-        
-        print(f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.4f}")
-        print(f"Val Acc: {val_acc:.4f}")
-        print(json.dumps(val_report, indent=2))
-        
-        # Save best model
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-                'val_acc': val_acc,
-            }, 'data/models/best_model.pth')
-            print(f"✓ Saved best model (Val Acc: {val_acc:.4f})")
-    
-    print(f"\nTraining complete! Best validation accuracy: {best_val_acc:.4f}")
 
 if __name__ == '__main__':
-    main()
+    test_model()
