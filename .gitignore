@@ -1,6 +1,11 @@
 # Large datasets
 data/processed/
 *.csv
+# Models
+*.pth
+*.pt
+*.ckpt
+models/
 
 
 
