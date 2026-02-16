@@ -381,5 +381,7 @@ def hash_article(text):
         client.register_article(hash_bytes, 'hindi')
     """
     import hashlib
-    normalized = " ".join(text.strip().split())
+    normalized = text.strip()              # remove leading/trailing newlines
+    normalized = " ".join(normalized.split())  # collapse whitespace
+
     return hashlib.sha256(normalized.encode("utf-8")).digest()

@@ -1,0 +1,133 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Fake News Analysis</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 30px; 
+                     border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 3px solid #2196F3; padding-bottom: 10px; }
+        .prediction { font-size: 24px; font-weight: bold; padding: 20px; 
+                      border-radius: 8px; margin: 20px 0; }
+        .fake { background: #ffebee; color: #c62828; border-left: 5px solid #c62828; }
+        .real { background: #e8f5e9; color: #2e7d32; border-left: 5px solid #2e7d32; }
+        .confidence { font-size: 18px; margin: 10px 0; color: #666; }
+        .text-box { background: #fafafa; padding: 20px; border-radius: 8px; 
+                    margin: 20px 0; line-height: 1.8; border: 1px solid #ddd; }
+        mark { background-color: #ffeb3b; padding: 2px 4px; border-radius: 3px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f0f0f0; font-weight: bold; }
+        .section { margin: 30px 0; }
+        .section-title { font-size: 20px; font-weight: bold; color: #555; 
+                         margin-bottom: 15px; border-left: 4px solid #2196F3; padding-left: 10px; }
+        .positive { color: green; }
+        .negative { color: red; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; 
+                  color: #888; font-size: 12px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Fake News Detection Report</h1>
+        
+        <div class="prediction fake">
+            Prediction: Fake
+        </div>
+        
+        <div class="confidence">
+            Confidence: 100.0% • 
+            Fake: 100.0% • 
+            Real: 0.0%
+        </div>
+        
+        <div class="section">
+            <div class="section-title">📄 Article Text (Important Words Highlighted)</div>
+            <div class="text-box">
+                <mark style="background-color: #ffeb3b;">मीडिया</mark> बोल, एपिसोड एजेंडा पत्रकारिता <mark style="background-color: #ffeb3b;">और</mark> <mark style="background-color: #ffeb3b;">डेटा</mark> लीक <mark style="background-color: #ffeb3b;">मीडिया</mark> बोल <mark style="background-color: #ffeb3b;">की</mark> वीं कड़ी में उर्मिलेश सोशल <mark style="background-color: #ffeb3b;">मीडिया</mark> पर <mark style="background-color: #ffeb3b;">वायरल</mark> हुए अररिया <mark style="background-color: #ffeb3b;">वीडियो</mark> <mark style="background-color: #ffeb3b;">की</mark> <mark style="background-color: #ffeb3b;">मीडिया</mark> रिपोर्टिंग, राज्यसभा चुनाव <mark style="background-color: #ffeb3b;">और</mark> कैंब्रिज एनालिटिका को लेकर हुए <mark style="background-color: #ffeb3b;">डेटा</mark> लीक विवाद पर आईआईएमसी के एसोसिएट <mark style="background-color: #ffeb3b;">प्रोफेसर</mark> आनंद प्रधान <mark style="background-color: #ffeb3b;">और</mark> <mark style="background-color: #ffeb3b;">न्यूज़लॉन्ड्री</mark> <mark style="background-color: #ffeb3b;">की</mark> एसोसिएट एडिटर मनीषा पांडे से चर्चा कर रहे <mark style="background-color: #ffeb3b;">हैं.</mark> यह भी पढ़ेंफेसबुक <mark style="background-color: #ffeb3b;">डेटा</mark> चोरी मामले में कांग्रेस <mark style="background-color: #ffeb3b;">और</mark> भाजपा जनता <mark style="background-color: #ffeb3b;">की</mark> आंखों में धूल <mark style="background-color: #ffeb3b;">झोंक</mark> रहे हैं यह भी पढ़ेंसांप्रदायिकता फैलाने के आरोप में ज़ी हिंदुस्तान के ख़िलाफ़ शिकायत दर्ज
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">💡 Top 10 Influential Words</div>
+            <table>
+                <tr>
+                    <th>Rank</th>
+                    <th>Word/Phrase</th>
+                    <th>Impact</th>
+                    <th>Direction</th>
+                </tr>
+                <tr>
+                        <td>1</td>
+                        <td><strong>मीडिया</strong></td>
+                        <td class="positive">+0.1627</td>
+                        <td>Supports prediction</td>
+                    </tr><tr>
+                        <td>2</td>
+                        <td><strong>डेटा</strong></td>
+                        <td class="positive">+0.1502</td>
+                        <td>Supports prediction</td>
+                    </tr><tr>
+                        <td>3</td>
+                        <td><strong>वीडियो</strong></td>
+                        <td class="positive">+0.1041</td>
+                        <td>Supports prediction</td>
+                    </tr><tr>
+                        <td>4</td>
+                        <td><strong>और</strong></td>
+                        <td class="negative">-0.0817</td>
+                        <td>Opposes prediction</td>
+                    </tr><tr>
+                        <td>5</td>
+                        <td><strong>हैं.</strong></td>
+                        <td class="negative">-0.0672</td>
+                        <td>Opposes prediction</td>
+                    </tr><tr>
+                        <td>6</td>
+                        <td><strong>न्यूज़लॉन्ड्री</strong></td>
+                        <td class="positive">+0.0485</td>
+                        <td>Supports prediction</td>
+                    </tr><tr>
+                        <td>7</td>
+                        <td><strong>वायरल</strong></td>
+                        <td class="positive">+0.0441</td>
+                        <td>Supports prediction</td>
+                    </tr><tr>
+                        <td>8</td>
+                        <td><strong>की</strong></td>
+                        <td class="negative">-0.0423</td>
+                        <td>Opposes prediction</td>
+                    </tr><tr>
+                        <td>9</td>
+                        <td><strong>झोंक</strong></td>
+                        <td class="negative">-0.0275</td>
+                        <td>Opposes prediction</td>
+                    </tr><tr>
+                        <td>10</td>
+                        <td><strong>प्रोफेसर</strong></td>
+                        <td class="negative">-0.0269</td>
+                        <td>Opposes prediction</td>
+                    </tr>
+            </table>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">📊 Interpretation</div>
+            <p><strong>What do these scores mean?</strong></p>
+            <ul>
+                <li><strong>Positive scores (+):</strong> Words that support the model's prediction</li>
+                <li><strong>Negative scores (-):</strong> Words that oppose the model's prediction</li>
+                <li><strong>Higher magnitude:</strong> Stronger influence on the decision</li>
+            </ul>
+        </div>
+        
+        <div class="footer">
+            Generated by Multilingual Fake News Detection System<br>
+            Model: IndicBERT + BiLSTM with Attention | Method: LIME Explainability
+        </div>
+    </div>
+</body>
+</html>
+        

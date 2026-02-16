@@ -1,0 +1,133 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Fake News Analysis</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 30px; 
+                     border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { color: #333; border-bottom: 3px solid #2196F3; padding-bottom: 10px; }
+        .prediction { font-size: 24px; font-weight: bold; padding: 20px; 
+                      border-radius: 8px; margin: 20px 0; }
+        .fake { background: #ffebee; color: #c62828; border-left: 5px solid #c62828; }
+        .real { background: #e8f5e9; color: #2e7d32; border-left: 5px solid #2e7d32; }
+        .confidence { font-size: 18px; margin: 10px 0; color: #666; }
+        .text-box { background: #fafafa; padding: 20px; border-radius: 8px; 
+                    margin: 20px 0; line-height: 1.8; border: 1px solid #ddd; }
+        mark { background-color: #ffeb3b; padding: 2px 4px; border-radius: 3px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f0f0f0; font-weight: bold; }
+        .section { margin: 30px 0; }
+        .section-title { font-size: 20px; font-weight: bold; color: #555; 
+                         margin-bottom: 15px; border-left: 4px solid #2196F3; padding-left: 10px; }
+        .positive { color: green; }
+        .negative { color: red; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; 
+                  color: #888; font-size: 12px; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Fake News Detection Report</h1>
+        
+        <div class="prediction real">
+            Prediction: Real
+        </div>
+        
+        <div class="confidence">
+            Confidence: 91.9% • 
+            Fake: 8.1% • 
+            Real: 91.9%
+        </div>
+        
+        <div class="section">
+            <div class="section-title">📄 Article Text (Important Words Highlighted)</div>
+            <div class="text-box">
+                <mark style="background-color: #ffeb3b;">भारत</mark> <mark style="background-color: #ffeb3b;">सरकार</mark> <mark style="background-color: #ffeb3b;">ने</mark> आज <mark style="background-color: #ffeb3b;">नई</mark> शिक्षा नीति <mark style="background-color: #ffeb3b;">2020</mark> <mark style="background-color: #ffeb3b;">की</mark> <mark style="background-color: #ffeb3b;">घोषणा</mark> <mark style="background-color: #ffeb3b;">की।</mark> शिक्षा मंत्री <mark style="background-color: #ffeb3b;">ने</mark> प्रेस <mark style="background-color: #ffeb3b;">कॉन्फ्रेंस</mark> में इसके मुख्य बिंदुओं <mark style="background-color: #ffeb3b;">की</mark> जानकारी <mark style="background-color: #ffeb3b;">दी।</mark>
+            </div>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">💡 Top 10 Influential Words</div>
+            <table>
+                <tr>
+                    <th>Rank</th>
+                    <th>Word/Phrase</th>
+                    <th>Impact</th>
+                    <th>Direction</th>
+                </tr>
+                <tr>
+                        <td>1</td>
+                        <td><strong>की।</strong></td>
+                        <td class="negative">-0.5407</td>
+                        <td>Opposes prediction</td>
+                    </tr><tr>
+                        <td>2</td>
+                        <td><strong>2020</strong></td>
+                        <td class="positive">+0.3759</td>
+                        <td>Supports prediction</td>
+                    </tr><tr>
+                        <td>3</td>
+                        <td><strong>दी।</strong></td>
+                        <td class="negative">-0.2315</td>
+                        <td>Opposes prediction</td>
+                    </tr><tr>
+                        <td>4</td>
+                        <td><strong>ने</strong></td>
+                        <td class="negative">-0.2190</td>
+                        <td>Opposes prediction</td>
+                    </tr><tr>
+                        <td>5</td>
+                        <td><strong>सरकार</strong></td>
+                        <td class="positive">+0.2118</td>
+                        <td>Supports prediction</td>
+                    </tr><tr>
+                        <td>6</td>
+                        <td><strong>भारत</strong></td>
+                        <td class="positive">+0.1439</td>
+                        <td>Supports prediction</td>
+                    </tr><tr>
+                        <td>7</td>
+                        <td><strong>नई</strong></td>
+                        <td class="negative">-0.1423</td>
+                        <td>Opposes prediction</td>
+                    </tr><tr>
+                        <td>8</td>
+                        <td><strong>कॉन्फ्रेंस</strong></td>
+                        <td class="positive">+0.1204</td>
+                        <td>Supports prediction</td>
+                    </tr><tr>
+                        <td>9</td>
+                        <td><strong>घोषणा</strong></td>
+                        <td class="positive">+0.0891</td>
+                        <td>Supports prediction</td>
+                    </tr><tr>
+                        <td>10</td>
+                        <td><strong>की</strong></td>
+                        <td class="negative">-0.0810</td>
+                        <td>Opposes prediction</td>
+                    </tr>
+            </table>
+        </div>
+        
+        <div class="section">
+            <div class="section-title">📊 Interpretation</div>
+            <p><strong>What do these scores mean?</strong></p>
+            <ul>
+                <li><strong>Positive scores (+):</strong> Words that support the model's prediction</li>
+                <li><strong>Negative scores (-):</strong> Words that oppose the model's prediction</li>
+                <li><strong>Higher magnitude:</strong> Stronger influence on the decision</li>
+            </ul>
+        </div>
+        
+        <div class="footer">
+            Generated by Multilingual Fake News Detection System<br>
+            Model: IndicBERT + BiLSTM with Attention | Method: LIME Explainability
+        </div>
+    </div>
+</body>
+</html>
+        

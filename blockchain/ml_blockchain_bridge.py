@@ -36,7 +36,11 @@ class MLBlockchainBridge:
         
         print("✓ Connected to blockchain")
         print(f"✓ Using account: {self.client.account.address}")
-    
+
+        print("\n🔍 CHAIN DEBUG")
+        print("Chain ID:", self.client.web3.eth.chain_id)
+        print("Network ID:", self.client.web3.net.version)
+        
     def register_prediction(self, article_text, prediction, confidence, language='hindi'):
         """
         Record ML prediction on blockchain
