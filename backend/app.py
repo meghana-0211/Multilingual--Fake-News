@@ -1,184 +1,213 @@
-# backend/app.py
-from flask import Flask, request, jsonify
+"""
+backend/app.py
+
+Flask application factory.
+
+Run (development):
+    cd backend
+    python app.py
+
+Or with gunicorn (production):
+    gunicorn "app:create_app()" --bind 0.0.0.0:5000 --workers 2
+"""
+
+import logging
+import os
+import sys
+
+from flask import Flask, jsonify
 from flask_cors import CORS
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-import hashlib
-import torch
+from flask_jwt_extended import JWTManager
 
-from models.ml_model import LSTMBERTEnsemble
-from models.preprocessor import MultilingualPreprocessor
-from models.explainer import ExplainabilityEngine
-from blockchain.web3_client import BlockchainClient
-from database.models import db, User, Feedback
-from config import Config
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
-app.config.from_object(Config)
 
-# Initialize extensions
-CORS(app)
-jwt = JWTManager(app)
-db.init_app(app)
+def create_app(env: str = "development", test_config: dict | None = None) -> Flask:
+    app = Flask(__name__)
 
-# Initialize ML components
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-preprocessor = MultilingualPreprocessor()
-model = LSTMBERTEnsemble().to(device)
+    from backend.config import config
+    app.config.from_object(config.get(env, config["default"]))
 
-# Load trained model
-checkpoint = torch.load('data/models/best_model.pth', map_location=device)
-model.load_state_dict(checkpoint['model_state_dict'])
-model.eval()
+    if test_config:
+        app.config.update(test_config)
 
-# Explainability
-explainer = ExplainabilityEngine(model, preprocessor)
+    _ensure_db_dir(app)
 
-# Blockchain client
-blockchain = BlockchainClient()
-blockchain.load_contract('ArticleRegistry', Config.ARTICLE_REGISTRY_ADDRESS)
-blockchain.load_contract('AnnotationRegistry', Config.ANNOTATION_REGISTRY_ADDRESS)
-blockchain.set_account(Config.PRIVATE_KEY)
+    from backend.database.models import db
+    db.init_app(app)
 
-# Routes
-@app.route('/api/analyze', methods=['POST'])
-def analyze_article():
-    """Main endpoint for fake news detection"""
-    data = request.json
-    text = data.get('text')
-    language = data.get('language', 'hindi')
-    
-    if not text:
-        return jsonify({'error': 'No text provided'}), 400
-    
-    # Preprocess
-    encoding, normalized_text = preprocessor.preprocess_batch([text], [language])
-    
-    # Move to device
-    input_ids = encoding['input_ids'].to(device)
-    attention_mask = encoding['attention_mask'].to(device)
-    
-    # Inference
-    with torch.no_grad():
-        outputs = model(input_ids, attention_mask)
-        logits = outputs['logits']
-        probs = torch.softmax(logits, dim=1)
-        
-        fake_prob = probs[0][0].item()
-        real_prob = probs[0][1].item()
-        prediction = 'fake' if fake_prob > real_prob else 'real'
-        confidence = max(fake_prob, real_prob)
-    
-    # Generate explanation
-    explanation = explainer.explain(text, language)
-    
-    # Calculate content hash
-    content_hash = hashlib.sha256(text.encode()).hexdigest()
-    
-    # Check blockchain verification
-    verification = blockchain.verify_article(content_hash)
-    annotations = blockchain.get_annotations(content_hash)
-    
-    response = {
-        'prediction': prediction,
-        'confidence': float(confidence),
-        'scores': {
-            'fake': float(fake_prob),
-            'real': float(real_prob)
-        },
-        'explanation': explanation,
-        'contentHash': content_hash,
-        'blockchain': {
-            'verified': verification['exists'],
-            'publisher': verification.get('publisher'),
-            'timestamp': verification.get('timestamp'),
-            'annotations': annotations
-        }
-    }
-    
-    return jsonify(response)
+    CORS(app, origins=app.config["CORS_ORIGINS"])
+    JWTManager(app)
 
-@app.route('/api/submit-feedback', methods=['POST'])
-@jwt_required()
-def submit_feedback():
-    """Submit user feedback for model improvement"""
-    current_user = get_jwt_identity()
-    data = request.json
-    
-    feedback = Feedback(
-        user_id=current_user,
-        article_text=data['text'],
-        predicted_label=data['predictedLabel'],
-        correct_label=data['correctLabel'],
-        language=data['language'],
-        confidence=data.get('confidence')
-    )
-    
-    db.session.add(feedback)
-    db.session.commit()
-    
-    return jsonify({'message': 'Feedback submitted successfully'}), 201
-
-@app.route('/api/register-article', methods=['POST'])
-@jwt_required()
-def register_article():
-    """Register article on blockchain (publishers only)"""
-    data = request.json
-    
-    content_hash = hashlib.sha256(data['text'].encode()).hexdigest()
-    language = data['language']
-    
-    try:
-        receipt = blockchain.register_article(content_hash, language)
-        return jsonify({
-            'success': True,
-            'transactionHash': receipt.transactionHash.hex(),
-            'contentHash': content_hash
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/add-annotation', methods=['POST'])
-@jwt_required()
-def add_annotation():
-    """Add fact-check annotation (fact-checkers only)"""
-    data = request.json
-    
-    content_hash = hashlib.sha256(data['text'].encode()).hexdigest()
-    
-    try:
-        receipt = blockchain.add_annotation(
-            content_hash,
-            data['flagType'],
-            data['ipfsHash'],
-            data['confidence']
-        )
-        return jsonify({
-            'success': True,
-            'transactionHash': receipt.transactionHash.hex()
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/auth/login', methods=['POST'])
-def login():
-    """User authentication"""
-    data = request.json
-    user = User.query.filter_by(email=data['email']).first()
-    
-    if user and user.check_password(data['password']):
-        access_token = create_access_token(identity=user.id)
-        return jsonify({
-            'accessToken': access_token,
-            'user': {
-                'id': user.id,
-                'email': user.email,
-                'role': user.role
-            }
-        })
-    
-    return jsonify({'error': 'Invalid credentials'}), 401
-
-if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+        logger.info("Database tables ready.")
+
+    _load_ml(app)
+    _load_blockchain(app)
+
+    from api.auth import auth_bp
+    from api.routes import api_bp
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(api_bp)
+
+    _register_error_handlers(app)
+    logger.info("App ready.")
+    return app
+
+
+# ---------------------------------------------------------------------------
+# ML loader
+# ---------------------------------------------------------------------------
+
+def _load_ml(app: Flask) -> None:
+    """
+    Load order:
+      1. FakeNewsDetector  (loads checkpoint — done once)
+      2. MultilingualPreprocessor
+      3. DetectorAsModelWrapper  (zero-cost shim around the detector)
+      4. ExplainabilityEngine(model_wrapper)
+    """
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    ml_flow_dir = os.path.join(backend_dir, "ml_flow")
+    for p in (backend_dir, ml_flow_dir):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+
+    model_path = app.config["MODEL_PATH"]
+
+    # 1. Detector --------------------------------------------------------
+    try:
+        from ml_flow.ml_model import FakeNewsDetector
+        detector = FakeNewsDetector.load(
+            model_path,
+            model_name=app.config["BERT_MODEL"],
+        )
+        app.config["DETECTOR"] = detector
+        logger.info(f"Model loaded: {model_path}")
+    except Exception as exc:
+        logger.error(f"Failed to load model: {exc}")
+        app.config["DETECTOR"] = None
+
+    # 2. Preprocessor ----------------------------------------------------
+    try:
+        from ml_flow.multilingual_preprocessor import MultilingualPreprocessor
+        app.config["PREPROCESSOR"] = MultilingualPreprocessor(
+            model_name=app.config["BERT_MODEL"]
+        )
+        logger.info("Preprocessor ready.")
+    except Exception as exc:
+        logger.warning(f"Preprocessor not loaded: {exc}")
+        app.config["PREPROCESSOR"] = None
+
+    # 3 + 4. Explainer ---------------------------------------------------
+    detector = app.config.get("DETECTOR")
+    if detector is None:
+        logger.warning("Explainer skipped — model not loaded.")
+        app.config["EXPLAINER"] = None
+        return
+
+    try:
+        from ml_flow.ml_model import DetectorAsModelWrapper
+        from ml_flow.explainability  import ExplainabilityEngine
+
+        wrapper = DetectorAsModelWrapper(detector)
+        app.config["EXPLAINER"] = ExplainabilityEngine(wrapper)
+        logger.info("Explainer ready.")
+    except Exception as exc:
+        logger.warning(f"Explainer not loaded: {exc}")
+        app.config["EXPLAINER"] = None
+
+
+# ---------------------------------------------------------------------------
+# Blockchain loader
+# ---------------------------------------------------------------------------
+
+def _load_blockchain(app: Flask) -> None:
+    if not app.config.get("BLOCKCHAIN_ENABLED", True):
+        logger.info("Blockchain disabled via config.")
+        app.config["BLOCKCHAIN"] = None
+        return
+
+    try:
+        backend_dir = os.path.dirname(os.path.abspath(__file__))
+        bc_dir      = os.path.join(os.path.dirname(backend_dir), "blockchain")
+        if bc_dir not in sys.path:
+            sys.path.insert(0, bc_dir)
+
+        from blockchain.web3_client import BlockchainClient
+ 
+        client = BlockchainClient(
+            provider_url=app.config["BLOCKCHAIN_URL"],
+            publisher_registry_address=app.config["PUBLISHER_REGISTRY_ADDRESS"],
+            article_registry_address=app.config["ARTICLE_REGISTRY_ADDRESS"],
+            annotation_registry_address=app.config["ANNOTATION_REGISTRY_ADDRESS"],
+        )
+
+        private_key = app.config.get("PRIVATE_KEY", "")
+        if private_key:
+            client.set_account(private_key)
+
+        client.load_contract("PublisherRegistry")
+        client.load_contract("ArticleRegistry")
+        client.load_contract("AnnotationRegistry")
+
+        app.config["BLOCKCHAIN"] = client
+        logger.info("Blockchain client ready.")
+    except Exception as exc:
+        logger.warning(f"Blockchain unavailable: {exc}")
+        app.config["BLOCKCHAIN"] = None
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _ensure_db_dir(app: Flask) -> None:
+    db_url = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+    if db_url.startswith("sqlite:///"):
+        db_path = db_url.replace("sqlite:///", "")
+        db_dir  = os.path.dirname(db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
+
+
+def _register_error_handlers(app: Flask) -> None:
+    @app.errorhandler(400)
+    def bad_request(e):
+        return jsonify({"error": "Bad request", "detail": str(e)}), 400
+
+    @app.errorhandler(401)
+    def unauthorised(e):
+        return jsonify({"error": "Unauthorised"}), 401
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return jsonify({"error": "Forbidden"}), 403
+
+    @app.errorhandler(404)
+    def not_found(e):
+        return jsonify({"error": "Not found"}), 404
+
+    @app.errorhandler(500)
+    def server_error(e):
+        logger.exception(e)
+        return jsonify({"error": "Internal server error"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    env = os.environ.get("FLASK_ENV", "development")
+    application = create_app(env)
+    application.run(
+        debug=application.config["DEBUG"],
+        host="0.0.0.0",
+        port=5001,
+    )

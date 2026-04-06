@@ -6,6 +6,7 @@ data/processed/
 *.pt
 *.ckpt
 models/
-
+.env
+pycache/
 
 
