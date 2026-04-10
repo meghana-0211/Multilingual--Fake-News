@@ -1,0 +1,193 @@
+.page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--sp-12) var(--sp-8) var(--sp-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-8);
+}
+
+/* ── Hero ── */
+.hero { animation: fadeUp 0.5s var(--ease); }
+
+.heroEyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: var(--sp-3);
+}
+
+.heroTitle {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 7vw, 72px);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin-bottom: var(--sp-4);
+}
+
+.heroAccent { color: var(--amber); }
+
+.heroSub {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 440px;
+  line-height: 1.6;
+}
+
+/* ── Input panel ── */
+.inputPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  animation: fadeUp 0.5s 0.1s var(--ease) both;
+}
+
+/* Language selector */
+.langBar {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.langBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--r-md);
+  padding: var(--sp-3) var(--sp-5);
+  transition: border-color 0.15s, background 0.15s;
+  min-width: 80px;
+}
+.langBtn:hover { border-color: var(--border-mid); background: var(--bg-elevated); }
+.langActive    { border-color: var(--amber) !important; background: var(--amber-dim) !important; }
+
+.langNative {
+  font-size: 16px;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.langEng {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+.langActive .langEng { color: var(--amber); }
+
+/* Textarea */
+.textareaWrap {
+  border: 1px solid var(--border-dim);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  transition: border-color 0.15s;
+  background: var(--bg-surface);
+}
+.textareaWrap:focus-within { border-color: var(--amber-mid); }
+
+.textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  resize: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.7;
+  padding: var(--sp-5) var(--sp-6);
+  outline: none;
+}
+.textarea::placeholder { color: var(--text-dim); }
+
+.textareaFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--sp-3) var(--sp-5);
+  border-top: 1px solid var(--border-dim);
+}
+
+.charCount {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.exampleBtn {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: color 0.15s;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.exampleBtn:hover { color: var(--amber); }
+
+/* Error */
+.error {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--danger);
+  background: var(--danger-dim);
+  border: 1px solid rgba(217,79,79,0.2);
+  border-radius: var(--r-sm);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+/* Actions */
+.actions { display: flex; gap: var(--sp-3); align-items: center; }
+
+.analyseBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  background: var(--amber);
+  color: #0a0a0b;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  padding: var(--sp-3) var(--sp-8);
+  border-radius: var(--r-md);
+  transition: opacity 0.15s, transform 0.1s;
+  letter-spacing: 0.01em;
+}
+.analyseBtn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+.analyseBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-top-color: #0a0a0b;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+
+.clearBtn {
+  background: none;
+  border: 1px solid var(--border-dim);
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--r-md);
+  transition: border-color 0.15s, color 0.15s;
+}
+.clearBtn:hover { border-color: var(--border-mid); color: var(--text-primary); }
+
+/* ── Result ── */
+.resultWrap { animation: fadeUp 0.5s var(--ease); }
+
+@media (max-width: 600px) {
+  .page { padding: var(--sp-8) var(--sp-4) var(--sp-10); }
+  .heroTitle { font-size: 36px; }
+  .langBar { gap: var(--sp-2); }
+  .langBtn { min-width: 68px; padding: var(--sp-2) var(--sp-3); }
+}
