@@ -8,5 +8,5 @@ data/processed/
 models/
 .env
 pycache/
-
+__pycache__/
 
