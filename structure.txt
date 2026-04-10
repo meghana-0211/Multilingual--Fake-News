@@ -1,0 +1,67 @@
+.
+├── backend
+│   ├── api
+│   │   ├── auth.py
+│   │   └── routes.py
+│   ├── app.py
+│   ├── config.py
+│   ├── database
+│   │   ├── crud.py
+│   │   └── models.py
+│   ├── ml_flow
+│   │   ├── __pycache__
+│   │   ├── best_model.pth
+│   │   ├── data
+│   │   ├── docs
+│   │   ├── explainability.py
+│   │   ├── ml_model.py
+│   │   ├── Multilingual_fake_news.ipynb
+│   │   ├── multilingual_preprocessor.py
+│   │   ├── multilingual-fake-news-complete.tar.gz
+│   │   ├── output_hindi_fake.html
+│   │   ├── output_hindi_fake.png
+│   │   ├── output_hindi_real.html
+│   │   ├── output_hindi_real.png
+│   │   ├── preprocessing.py
+│   │   ├── test_demo.py
+│   │   └── train.py
+│   └── utils
+│       ├── crypto.py
+│       └── validators.py
+├── blockchain
+│   ├── __pycache__
+│   │   ├── config.cpython-314.pyc
+│   │   ├── ml_blockchain_bridge.cpython-314.pyc
+│   │   └── web3_client.cpython-314.pyc
+│   ├── build
+│   │   └── contracts
+|.  |      |_ AnnotationRegistry.json
+|.  |      |_ArticleRegistry.json
+|.  |      |_PublisherRegistry.json
+│   ├── config.py
+│   ├── contracts
+│   │   ├── AnnotationRegistry.sol
+│   │   ├── ArticleRegistry.sol
+│   │   └── PublisherRegistry.sol
+│   ├── migrations
+│   │   └── 2_deploy_contracts.js
+│   ├── ml_blockchain_bridge.py
+│   ├── setup_accounts.py
+│   ├── test
+│   ├── truffle-config.js
+│   ├── verify_blockchain.py
+│   └── web3_client.py
+├── data
+│   ├── models
+│   └── processed
+│       └── multilingual_dataset.csv
+├── docker-compose.yml
+├── frontend
+├── Multilingual_fake_news.ipynb
+├── README.md
+├── structure.txt
+└── tests
+    ├── test_api.py
+    └── test_ml.py
+
+28 directories, 111 files

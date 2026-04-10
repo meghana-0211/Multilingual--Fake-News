@@ -1,3 +1,5 @@
+#Users/Megha/finalyearproj/Hindi-Fake-News_detection/backend/config.py
+
 import os
 from datetime import timedelta
 
@@ -10,7 +12,7 @@ class Config:
     # Database
     SQLALCHEMY_DATABASE_URI = os.getenv(
         'DATABASE_URL',
-        'postgresql://admin:password@localhost:5432/fakenews'
+        'sqlite:///test.db'
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
@@ -30,7 +32,7 @@ class Config:
     IPFS_PORT = int(os.getenv('IPFS_PORT', '5001'))
     
     # Model
-    MODEL_PATH = os.getenv('MODEL_PATH', 'data/models/best_model.pth')
+    MODEL_PATH = os.getenv('MODEL_PATH', '/Users/Megha/finalyearproj/Hindi-Fake-News_detection/backend/ml_flow/best_model.pth')
     BERT_MODEL = os.getenv('BERT_MODEL', 'ai4bharat/indic-bert')
     
     # Languages supported
