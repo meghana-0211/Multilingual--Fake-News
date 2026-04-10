@@ -17,9 +17,9 @@ from flask_jwt_extended import (
     get_jwt_identity,
 )
 
-from backend.database.crud   import (create_user, get_user_by_email,
+from database.crud   import (create_user, get_user_by_email,
                               get_user_by_id, update_last_login)
-from backend.database.models import UserRole
+from database.models import UserRole
 
 logger = logging.getLogger(__name__)
 auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")

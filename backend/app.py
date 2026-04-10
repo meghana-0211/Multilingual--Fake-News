@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 def create_app(env: str = "development", test_config: dict | None = None) -> Flask:
     app = Flask(__name__)
 
-    from backend.config import config
+    from config import config
     app.config.from_object(config.get(env, config["default"]))
 
     if test_config:
@@ -37,7 +37,7 @@ def create_app(env: str = "development", test_config: dict | None = None) -> Fla
 
     _ensure_db_dir(app)
 
-    from backend.database.models import db
+    from database.models import db
     db.init_app(app)
 
     CORS(app, origins=app.config["CORS_ORIGINS"])

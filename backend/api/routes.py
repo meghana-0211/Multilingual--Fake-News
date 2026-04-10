@@ -20,7 +20,7 @@ import logging
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 
-from backend.database.crud import (
+from database.crud import (
     log_article, create_feedback,
     get_recent_articles, get_feedback_stats,
 )
